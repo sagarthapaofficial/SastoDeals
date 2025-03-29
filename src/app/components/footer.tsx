@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
 
+//FC treats the component as a function component
 const Footer: React.FC = () => {
   return (
     <footer className="bg-gray-900 text-white p-6">

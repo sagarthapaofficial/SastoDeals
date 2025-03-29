@@ -105,12 +105,11 @@ const SearchBar: React.FC = () => {
           {results.map((result, index) => (
             <div
               key={index}
-              className="p-4 border-b hover:bg-gray-100 transition duration-300 flex items-center"
+              className="p-4 border-b hover:bg-gray-600 transition duration-300 flex items-center"
             >
               <div className="flex-grow">
                 <h3 className="text-lg font-semibold">{result.title}</h3>
                 <p className="text-gray-500">{result.store}</p>
-                <p className="text-gray-500">Updated {result.updated} ago</p>
               </div>
               <div className="text-right">
                 <p className="text-xl font-bold">{result.price}</p>

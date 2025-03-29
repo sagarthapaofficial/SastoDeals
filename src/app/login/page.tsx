@@ -16,8 +16,10 @@ const Login: React.FC = () => {
   const router = useRouter(); // For navigation
 
   // Effect to listen for authentication state changes
+  //This runs when the component mounts/renders and runs when any dependecies change
   useEffect(() => {
     const { data: subscription } = supabase.auth.onAuthStateChange(
+      //subscribing to the auth state change from supabase
       async (event, session) => {
         if (session?.user) {
           // If a user is logged in, set the user state
@@ -54,6 +56,7 @@ const Login: React.FC = () => {
   // Handlers for toggling login states
   const handleEmailLogin = () => setIsEmailLogin(true); // Activate email login
   const handleFinishLogin = () => setIsFinishLogin(true); // Activate verification step
+
   const handleBack = () => {
     // Handle back button functionality
     if (isFinishLogin) {
@@ -89,6 +92,13 @@ const Login: React.FC = () => {
     }
   };
 
+  //Handles keyPress on Email input field
+  const handleKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      handleEmailSubmit();
+    }
+  };
+
   // Email login handler
   const handleEmailSubmit = async () => {
     const { error } = await supabase.auth.signInWithOtp({ email });
@@ -111,6 +121,7 @@ const Login: React.FC = () => {
       return;
     }
 
+    //Verifies the OTP code sent to the user's email
     const { error } = await supabase.auth.verifyOtp({
       email: storedEmail,
       token: verificationCode,
@@ -206,6 +217,7 @@ const Login: React.FC = () => {
                     type="text"
                     placeholder="Enter Code"
                     value={verificationCode}
+                    onKeyDown={handleVerificationSubmit}
                     onChange={(e) => setVerificationCode(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600"
                   />
@@ -235,6 +247,7 @@ const Login: React.FC = () => {
                     type="email"
                     placeholder="Enter your email"
                     value={email}
+                    onKeyPress={handleKeyPress}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600"
                   />

@@ -100,7 +100,7 @@ header .login-button {
   display: block;
 }
 
-/* Screen circling Animation */
+/* SearchBar circling Animation */
 
 @keyframes spin-border {
   0% {

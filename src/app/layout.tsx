@@ -1,3 +1,7 @@
+/**
+ * This defines persistent layout for the application.
+ * Wraps all child routes page.tsx files in a given folder.
+ */
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./styles/globals.css";
