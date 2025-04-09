@@ -1,10 +1,11 @@
 import puppeteer from "puppeteer";
+
 import { NextRequest, NextResponse } from "next/server";
 
 interface Product {
   title: string;
-  link: string;
   price: number;
+  link: string;
   store: string;
 }
 
@@ -20,27 +21,48 @@ interface WebsiteConfig {
   };
 }
 
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, " ") // Normalize multiple spaces
+    .replace(/[^a-z0-9\s]/g, ""); // Remove special characters
+}
+
+function getCheapProduct(products: Product[]): Product | null {
+  let cheapestProduct: Product | null = null;
+
+  for (const product of products) {
+    if (!cheapestProduct || product.price < cheapestProduct.price) {
+      cheapestProduct = product;
+    }
+  }
+
+  return cheapestProduct;
+}
+
+//Avoid the sponsored products shown
 const websites: WebsiteConfig[] = [
   {
     url: "https://www.amazon.ca/s?k=",
-    baseUrl: "https://www.amazon.ca",
+    baseUrl: "https://www.amazon.ca/",
     store: "Amazon",
     selectors: {
-      productContainer: '[data-asin="B0BN93RM5Q"]',
-      title: "a.a-link-normal h2", // Updated selector
-      link: "a.a-link-normal",
+      productContainer:
+        "div.a-section.a-spacing-small.puis-padding-left-small.puis-padding-right-small",
+      title: "div:nth-child(2) a.a-link-normal h2", // Updated selector
       price: "span.a-price span.a-offscreen",
+      link: "div:nth-child(2) a.a-link-normal",
     },
   },
 
   {
     url: "https://www.bestbuy.ca/en-ca/search?search=",
-    baseUrl: "https://www.bestbuy.ca",
+    baseUrl: "https://www.bestbuy.ca/",
     store: "BestBuy",
     selectors: {
-      productContainer: "div.listItem_10CIq.materialOverride_vWsDY",
+      productContainer: "li.productLine_2N9kG.x-productListItem",
       title: "h3.productItemName_3IZ3c",
-      link: '[itemprop="url"]',
+      link: 'a[itemprop="url"]',
       price: '[data-automation="product-price"] span',
     },
   },
@@ -91,6 +113,7 @@ const websites: WebsiteConfig[] = [
   // },
   // {
   //   url: "https://www.visions.ca/catalogsearch/result?q=",
+  //   baseUrl: "https://www.visions.ca/",
   //   store: "Visions Electronics",
   //   selectors: {
   //     productContainer: ".product",
@@ -99,125 +122,133 @@ const websites: WebsiteConfig[] = [
   //     price: ".price",
   //   },
   // },
-  {
-    url: "https://www.newegg.ca/p/pl?d=",
-    baseUrl: "https://www.newegg.ca",
-    store: "Newegg",
-    selectors: {
-      productContainer: ".item-cell",
-      title: ".item-title",
-      link: "a.item-title",
-      price: ".price-current",
-    },
-  },
+
+  // {
+  //   url: "https://www.newegg.ca/p/pl?d=",
+  //   baseUrl: "https://www.newegg.ca",
+  //   store: "Newegg",
+  //   selectors: {
+  //     productContainer: ".item-cell",
+  //     title: ".item-title",
+  //     link: "a.item-title",
+  //     price: ".price-current",
+  //   },
+  // },
 ];
 
-export const scrapeWebsite = async (
+async function scrapeWebsite(
   config: WebsiteConfig,
   query: string
-): Promise<Product | null> => {
+): Promise<Product | null> {
   const browser = await puppeteer.launch({
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
-  const page = await browser.newPage();
-  await page.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
-  );
-  await page.evaluateOnNewDocument(() => {
-    Object.defineProperty(navigator, "webdriver", { get: () => false });
-  });
-
-  // Disable unnecessary requests like images and styles
-  // await page.setRequestInterception(true);
-  // page.on("request", (req) => {
-  //   if (["image", "stylesheet", "font", "media"].includes(req.resourceType())) {
-  //     req.abort();
-  //   } else {
-  //     req.continue();
-  //   }
-  // });
 
   try {
-    await page.goto(`${config.url}${encodeURIComponent(query)}`, {
-      waitUntil: "domcontentloaded",
-      timeout: 90000,
+    const page = await browser.newPage();
+
+    await page.goto(`${config.url}${query}`, {
+      waitUntil: "networkidle2",
     });
 
     await page.waitForSelector(config.selectors.productContainer, {
-      timeout: 60000,
+      visible: true,
+      timeout: 20000,
     });
 
-    // Pass the query as an argument to the page.evaluate function
-    const firstProductDetails = await page.evaluate(
-      (selectors, query) => {
-        const firstProductContainer = document.querySelector(
-          selectors.productContainer
+    const productContainer = await page.$$(config.selectors.productContainer);
+    // productContainer.forEach((product) => {
+    //   console.log("Product: ", product); // Log the product element
+    // });
+
+    const products: Product[] = [];
+
+    //Loop through all handles
+    for (const product of productContainer) {
+      //Get the title:
+      const titleHandle = await product.$(config.selectors.title);
+
+      const priceHandle = await product.$(config.selectors.price);
+
+      const linkHandle = await product.$(config.selectors.link);
+      const title = await page.evaluate((el) => el?.textContent, titleHandle);
+
+      //console.log("Title: ", title?.trim());
+
+      const price = await page.evaluate((el) => el?.textContent, priceHandle);
+      const priceF = parseFloat(price?.trim().replace(/[^0-9.-]+/g, ""));
+
+      const link = await page.evaluate(
+        (el) => el?.getAttribute("href"),
+        linkHandle
+      );
+      const linkText = link?.trim() || "#";
+
+      const titleText = title?.trim() as string;
+
+      if (title?.toLowerCase() !== null && title?.toLowerCase() !== undefined) {
+        const isMatch = normalizeText(title?.toLowerCase()).includes(
+          normalizeText(query.toLowerCase())
         );
-        if (!firstProductContainer) return null;
 
-        const title =
-          firstProductContainer
-            .querySelector(selectors.title)
-            ?.textContent?.trim() || "No Title";
-
-        // Split the query into keywords
-        const keywords = query.toLowerCase().split(/\s+/); // Split by whitespace
-
-        // Check if any keyword matches the title
-        const matches = keywords.every((keyword) =>
-          title.toLowerCase().includes(keyword)
-        );
-
-        if (!matches) {
-          return null; // Skip this product if no keywords match
+        // console.log(
+        //   `TitleText: ${normalizeText(title?.toLowerCase())}, store: ${
+        //     config.store
+        //   }, queryLowerCase: ${query.toLowerCase()}`
+        // );
+        if (isMatch) {
+          // console.log(
+          //   `TitleText: ${title?.toLowerCase()}, store: ${config.store}`
+          // );
+          products.push({
+            title: titleText,
+            price: priceF,
+            link: linkText.includes("http")
+              ? linkText
+              : config.baseUrl + linkText,
+            store: config.store,
+          });
         }
-        console.log("Title:", title);
-        console.log("Query:", query); // Log the title for debugging
+      }
 
-        const link =
-          document.querySelector(selectors.link)?.getAttribute("href") || "#";
-        const priceText =
-          document.querySelector(selectors.price)?.textContent?.trim() || "0";
-
-        const price = parseFloat(priceText.replace(/[^0-9.]/g, ""));
-
-        return { title, link, price };
-      },
-      config.selectors,
-      query // Pass the query here
-    );
-
-    if (!firstProductDetails) {
-      throw new Error("No valid product found");
+      //console.log('Tiel :"%s\n".', title?.trim());
     }
+    //console.log("Products: ", products);
+    const cheapestProduct = getCheapProduct(products);
 
-    const finalLink =
-      config.store === "BestBuy"
-        ? config.baseUrl + firstProductDetails.link
-        : firstProductDetails.link;
+    //console.log("Cheapest product: ", cheapestProduct);
 
-    return {
-      title: firstProductDetails.title,
-      link: finalLink,
-      price: firstProductDetails.price,
-      store: config.store,
-    };
+    // console.log("All products:\n ");
+    // for (const product of products) {
+    //   console.log("Product: ", product);
+    // }
+
+    //await page.type("#twotabsearchtextbox", "iphone 14 pro max");
+
+    // Wait and click on first result
+    // const searchResultSelector =
+    //   "div.a-section.a-spacing-small.puis-padding-left-small.puis-padding-right-small div:nth-child(2) a.a-link-normal h2";
+    // arch box
+
+    //    const fullTitle = await data?.evaluate((el) => el.textContent);
+
+    //   console.log('The title of this blog post is "%s".', $("h2").text());
+
+    return cheapestProduct;
   } catch (error) {
-    console.error(`Error scraping ${config.store}:`, error);
-    return null;
+    console.error("Error occurred while scraping:", error);
+    return null; // Return null in case of an error
   } finally {
+    // Close the browser
+
     await browser.close();
   }
-};
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
+
   const query = searchParams.get("query");
-
-  // Log the incoming request URL and the query parameter
-  console.log("Incoming request URL:", req.url);
-
   if (!query) {
     return NextResponse.json(
       { error: "Query parameter is required" },
@@ -226,18 +257,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // Fetch the product details for the first product from each website
-    const allResults: (Product | null)[] = await Promise.all(
-      websites.map((website) => scrapeWebsite(website, query))
+    // Fetch the product details for the first product from each website with limited concurrency
+    let allResults: Product[] = []; // Initialize as an empty array
+
+    // Call scrapWebsites directly instead of wrapping it in a function
+    const allResults1: (Product | null)[] = await Promise.all(
+      websites.map((website) => scrapeWebsite(website, query)) // Call the function directly
     );
 
-    // Filter out null results and sort by price
-    const validResults = allResults.filter(
-      (result): result is Product => result !== null
-    );
-    const topResults = validResults
-      .sort((a, b) => a.price - b.price)
-      .slice(0, 3);
+    // Filter out null results
+    allResults = allResults1.filter((product) => product !== null) as Product[];
+
+    console.log("All results: ", allResults);
+
+    const topResults = allResults.sort((a, b) => a.price - b.price).slice(0, 3);
 
     return NextResponse.json(topResults, { status: 200 });
   } catch (error) {
