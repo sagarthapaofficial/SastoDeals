@@ -13,6 +13,14 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState<string>(""); // Stores the user's email
   const [verificationCode, setVerificationCode] = useState<string>(""); // Stores the verification code
   const [user, setUser] = useState<{ email: string } | null>(null); // Tracks the logged-in user
+
+  // Example usage
+  interface userData {
+    email: string;
+    firstname: string;
+    lastname: string;
+  }
+
   const router = useRouter(); // For navigation
 
   // Effect to listen for authentication state changes
@@ -25,6 +33,8 @@ const Login: React.FC = () => {
           // If a user is logged in, set the user state
           if (session.user.email) {
             setUser({ email: session.user.email });
+            //Add user to databse
+            addUserIfNotExists({ email: email, firstname: "", lastname: "" });
           } else {
             console.error("User email is undefined");
           }
@@ -40,6 +50,40 @@ const Login: React.FC = () => {
       subscription.subscription.unsubscribe();
     };
   }, []);
+
+  async function addUserIfNotExists(userData: userData) {
+    try {
+      // Check if the user already exists in the "user" table
+      const { data: existingUser, error: selectError } = await supabase
+        .from("user")
+        .select("*")
+        .eq("email", userData.email)
+        .single();
+
+      if (selectError && selectError.code !== "PGRST116") {
+        // Handle error if it's not a "no rows" error
+        console.error("Error checking user existence:", selectError);
+        return;
+      }
+
+      if (!existingUser) {
+        // User does not exist, insert new user
+        const { data: newUser, error: insertError } = await supabase
+          .from("user")
+          .insert([userData]);
+
+        if (insertError) {
+          console.error("Error inserting user:", insertError);
+        } else {
+          console.log("User added:", newUser);
+        }
+      } else {
+        console.log("User already exists, no action taken.");
+      }
+    } catch (error) {
+      console.error("Unexpected error:", error);
+    }
+  }
 
   // Logout handler
   const handleLogout = async () => {
@@ -133,6 +177,7 @@ const Login: React.FC = () => {
       toast.error("Invalid verification code. Please try again.");
     } else {
       toast.success("Successfully logged in!");
+
       router.push("/"); // Redirect to home page
     }
   };
@@ -217,7 +262,6 @@ const Login: React.FC = () => {
                     type="text"
                     placeholder="Enter Code"
                     value={verificationCode}
-                    onKeyDown={handleVerificationSubmit}
                     onChange={(e) => setVerificationCode(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600"
                   />
