@@ -25,7 +25,8 @@ function normalizeText(text: string): string {
   return text
     .toLowerCase()
     .replace(/\s+/g, " ") // Normalize multiple spaces
-    .replace(/[^a-z0-9\s]/g, ""); // Remove special characters
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim(); // Remove special characters
 }
 
 function getCheapProduct(products: Product[]): Product | null {
@@ -40,11 +41,22 @@ function getCheapProduct(products: Product[]): Product | null {
   return cheapestProduct;
 }
 
+function hasSufficientKeywordMatch(keywords, normalizedTitle) {
+  //reduce function is used to count the number of keywords that match the title
+  let matchCount = 0;
+  for (const keyword of keywords) {
+    if (normalizedTitle.includes(keyword)) {
+      matchCount++;
+    }
+  }
+  return matchCount == keywords.length; // Adjust the threshold as needed
+}
+
 //Avoid the sponsored products shown
 const websites: WebsiteConfig[] = [
   {
     url: "https://www.amazon.ca/s?k=",
-    baseUrl: "https://www.amazon.ca/",
+    baseUrl: "https://www.amazon.ca",
     store: "Amazon",
     selectors: {
       productContainer:
@@ -57,7 +69,7 @@ const websites: WebsiteConfig[] = [
 
   {
     url: "https://www.bestbuy.ca/en-ca/search?search=",
-    baseUrl: "https://www.bestbuy.ca/",
+    baseUrl: "https://www.bestbuy.ca",
     store: "BestBuy",
     selectors: {
       productContainer: "li.productLine_2N9kG.x-productListItem",
@@ -69,14 +81,12 @@ const websites: WebsiteConfig[] = [
   // {
   //   url: "https://www.walmart.ca/en/search?q=",
   //   store: "Walmart",
-  //   baseUrl: "https://www.walmart.ca/",
+  //   baseUrl: "https://www.walmart.ca",
   //   selectors: {
-  //     productContainer:
-  //       "div.flex.flex-wrap.w-100.flex-grow-0.flex-shrink-0.ph2.pr0-xl.pl4-xl.mt0-xl", // Updated selector
-  //     title: '[link-identifier="4VF1FCZJE4FL"] span',
-  //     link: '[link-identifier="4VF1FCZJE4FL"].w-100',
-  //     price:
-  //       'div.flex.flex-wrap.justify-start.items-center.lh-title.mb0[data-automation-id="product-price"] div', // Refined price selector
+  //     productContainer: "div.mb0.ph0-xl.pt0-xl.bb.b--near-white.w-25.pb3-m.ph1", // Updated selector
+  //     title: "span.w_q67L",
+  //     link: 'a[link-identifier="2ST3I0QR531Z"].w-100',
+  //     price: '[data-automation-id="product-price"] div', // Refined price selector
   //   },
   // },
 
@@ -142,6 +152,8 @@ async function scrapeWebsite(
 ): Promise<Product | null> {
   const browser = await puppeteer.launch({
     headless: true,
+    // args: ["--no-sandbox"],
+    // ignoreDefaultArgs: ["--enable-automation"],
   });
 
   try {
@@ -150,10 +162,14 @@ async function scrapeWebsite(
     await page.goto(`${config.url}${query}`, {
       waitUntil: "networkidle2",
     });
+    // await page.evaluate(async () => {
+    //   window.scrollBy(0, document.body.scrollHeight);
+    //   await new Promise((resolve) => setTimeout(resolve, 2000));
+    // });
 
     await page.waitForSelector(config.selectors.productContainer, {
       visible: true,
-      timeout: 20000,
+      timeout: 30000,
     });
 
     const productContainer = await page.$$(config.selectors.productContainer);
@@ -164,7 +180,7 @@ async function scrapeWebsite(
     const products: Product[] = [];
 
     //Loop through all handles
-    for (const product of productContainer) {
+    for (const product of productContainer.slice(0, 3)) {
       //Get the title:
       const titleHandle = await product.$(config.selectors.title);
 
@@ -186,16 +202,22 @@ async function scrapeWebsite(
 
       const titleText = title?.trim() as string;
 
-      if (title?.toLowerCase() !== null && title?.toLowerCase() !== undefined) {
-        const isMatch = normalizeText(title?.toLowerCase()).includes(
-          normalizeText(query.toLowerCase())
-        );
+      const keywords = query.toLowerCase().split(" "); //splits by whitespace
+
+      const normalizedTitle = normalizeText(titleText?.toLowerCase());
+      //const normalizedQuery = normalizeText(query.toLowerCase());
+
+      if (title !== null && title !== undefined) {
+        const isMatch =
+          // normalizedTitle.includes(normalizedQuery) ||
+          hasSufficientKeywordMatch(keywords, normalizedTitle);
 
         // console.log(
         //   `TitleText: ${normalizeText(title?.toLowerCase())}, store: ${
         //     config.store
         //   }, queryLowerCase: ${query.toLowerCase()}`
         // );
+        console.log("isMatch", isMatch);
         if (isMatch) {
           // console.log(
           //   `TitleText: ${title?.toLowerCase()}, store: ${config.store}`

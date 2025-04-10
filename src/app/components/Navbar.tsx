@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { supabase } from "@/app/supabaseClient";
+import { useRouter } from "next/navigation";
 
 const Navbar: React.FC = () => {
   const [menuOpen] = useState<boolean>(false); // Tracks if the menu is open
@@ -10,6 +11,7 @@ const Navbar: React.FC = () => {
     null
   ); // Tracks the logged-in user
   const [profileMenuOpen, setProfileMenuOpen] = useState<boolean>(false); // Tracks if the profile dropdown is open
+  const router = useRouter();
 
   useEffect(() => {
     // Listen for auth state changes
@@ -31,6 +33,13 @@ const Navbar: React.FC = () => {
       subscription.subscription.unsubscribe();
     };
   }, []);
+
+  const handleProtectedClick = (e: React.MouseEvent) => {
+    if (!user) {
+      e.preventDefault();
+      router.push("/login");
+    }
+  };
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -62,6 +71,7 @@ const Navbar: React.FC = () => {
           <Link
             href="/trending-products"
             className="text-gray-600 hover:text-gray-800"
+            onClick={handleProtectedClick}
           >
             Trending Products
           </Link>
@@ -70,12 +80,17 @@ const Navbar: React.FC = () => {
           <Link
             href="/compare-products"
             className="text-gray-600 hover:text-gray-800"
+            onClick={handleProtectedClick}
           >
             Compare Products
           </Link>
         </li>
         <li>
-          <Link href="/wishlist" className="text-gray-600 hover:text-gray-800">
+          <Link
+            href="/wishlist"
+            className="text-gray-600 hover:text-gray-800"
+            onClick={handleProtectedClick}
+          >
             Wishlist / Favourite
           </Link>
         </li>
@@ -83,6 +98,7 @@ const Navbar: React.FC = () => {
           <Link
             href="/price-drop-alerts"
             className="text-gray-600 hover:text-gray-800"
+            onClick={handleProtectedClick}
           >
             Price Drop Alerts
           </Link>
